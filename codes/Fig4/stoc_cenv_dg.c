@@ -1,20 +1,19 @@
 /*
- * Continual generation model with good/ bad year
- * Focal point is founder effect and the selection of better survival/ better birth species
- * First day of building: 19 July, 2017
- * Transformed to short-long term variability model from 23 Feb, 2018
- * File instruction:
- * 1. Put "gen_beta.h" and "gen_beta.c" in the folder containing this file
- * 2. Put the dsfmt folder and the folder containing this file into the same folder
+ * Stochastic model with discrete growth in continuous environments
+ * This file is designed for repeating simulations and calculating proportions of fixation
+ * First day of building: July 19, 2017
+ * Modified from competitive Lotka-Volterra differential equations
+ * Last modified: Oct 22, 2018
 ************************************************************************************************
 Execution:
-gcc gssl_dsto_1007.c gen_beta.h gen_beta.c -lm -stdlib=libstdc++
+gcc stoc_cenv_dg.c gen_beta.h gen_beta.c -lm -stdlib=libstdc++
 ./a.out
 ************************************************************************************************
  * Key parameters
- * N_gen, N_events: The number of generations and the number of events within a generation
- * shape_tmp, shape_short_tmp: The shape parameter of Beta distribution for generating environemntal conditions. Larger velues indicate narrower distribution. 
+ * N_gen, N_events: The number of episodes and the number of events within a episode
+ * shape_tmp, shape_short_tmp: The shape parameter of Beta distribution for generating environemntal conditions, both long-term (i.e. shape_tmp) and short-term (i.e. shape_short_tmp). Larger velues indicate narrower distribution. 
  */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>

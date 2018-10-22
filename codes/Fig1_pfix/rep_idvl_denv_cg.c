@@ -1,5 +1,5 @@
 /*
- * Continuous growth and individual-based model with discrete environemnts (good/ bad years)
+ * Individual-based model with continuous growth in discrete environemnts (good/ bad years)
  * This file is designed for repeating simulations and calculating proportions of fixation
  * First day of building: July 19, 2017
  * Modified from competitive Lotka-Volterra differential equations
@@ -16,6 +16,7 @@ gcc rep_idvl_denv_cg.c -o a.out
  * T_g, T_b: duration of a year in the simulation, correlated to growth rate
  * p[specialsit], p[generalist]: initial popualtion size (or density)
  */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include "../dSFMT-src-2.2.3/dSFMT.c"
