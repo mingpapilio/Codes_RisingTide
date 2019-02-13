@@ -1,5 +1,5 @@
 # Codes_RisingTide
-This repository is for open access to source codes and data in the paper "Biological adaptation under fluctuating selection", which is currently submitted to publishers and under reviewing.
+This repository is for open access to source codes and data in the paper "Biological adaptation under fluctuating selection", which is currently submitted to publishers and under review.
 
 1. **PLEASE READ** the comments at the beginning of each file, containing the key parameters for simulations and notes for plotting. 
 
@@ -7,4 +7,4 @@ This repository is for open access to source codes and data in the paper "Biolog
 
 3. In "simulated data" folder, we rearrange files by the sequence of each figure. Please note that some folders (i.e. FigS3) only have R file and lack real data, because the data is in another folder (i.e. Fig2).
 
-(Last modified: Oct23, 2018 by Ming Liu)
+(Ming Liu)
