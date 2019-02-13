@@ -9,7 +9,7 @@
  ************************************************************************************************
 
 Execution: (g++ and gcc both work)
-gcc stoc_cenv_cg.c gen_beta.h gen_beta.c -lm -stdlib=libstdc++
+gcc cdmc_ts.c gen_beta.h gen_beta.c -lm -stdlib=libstdc++
 ./a.out
 
 Plot with gnuplot:
@@ -19,8 +19,9 @@ plot 'summary.txt' using 3:1 title 'rising-tide' with lines lc rgb 'orange',\
 
  ************************************************************************************************
  * Key parameters
- * T_long, T_short: The relative durations of shorter- and longer-term conditions, and the duration of environmental conditions  
- * shape_tmp, shape_short_tmp: The shape parameter of Beta distribution for generating environemntal conditions, both long-term (i.e. shape_tmp) and short-term (i.e. shape_short_tmp). Larger velues indicate narrower distribution. 
+ * mean_env: The average environmental condition
+ * shape_long_var, shape_short_var: The shape parameter of Beta distribution for generating environemntal conditions, both long-term and short-term. Larger velues indicate narrower distribution. 
+ * T_long, T_short: The relative durations of shorter- and longer-term conditions (T_long= T_short*m)  
  */
 
 #include <stdio.h>
@@ -46,8 +47,8 @@ plot 'summary.txt' using 3:1 title 'rising-tide' with lines lc rgb 'orange',\
 
 // Global variables
     // Index of variables
-        int i_x= 1; //index of x (N1)<- specialist (rising-tide strategy)
-        int i_y= 2; //index of y (N2)<- generalist (bet-hedging strategy)
+        int i_spcl= 1;          // Index of specialist (rising-tide strategy)
+        int i_genl= 2;          // Index of generalist (bet-hedging strategy)
     // differential equation paramters (K, b, d will change according to environmental conditions)
         double b_spcl;          // Intrinsic growth rate of specialists
         double b_genl;          // Intrinsic growth rate of generallists
@@ -61,25 +62,24 @@ plot 'summary.txt' using 3:1 title 'rising-tide' with lines lc rgb 'orange',\
 // Main function
 int main (void)
 {
-    // Switches and crucial variables
-        // Switches
-            int s4= 1;				// Switch of terminating tiny populaitons
-            int s6= 2;              // Specify the type of distribution in environmental conditions
-            int s9= 0;              // Switch of fixing K, this overwrites any calculated K
-        // Temporal variables
-            int T=          20000; 	// Duration of simulation
-            double deltat=  0.005; 	// Length of time step
-            int T_long=  20;     // The length of long-term vatiation ***Note the difference of double and int
-            int T_short=    1;      // The length of short-term variation 
-
+    // Switches
+        int s4= 1;				    // Switch of terminating tiny populaitons
+        int s6= 2;                  // Specify the type of distribution in environmental conditions
+        int s9= 0;                  // Switch of fixing K, this overwrites any calculated K
+    // Temporal variables
+        int T=          20000; 	    // Duration of simulation
+        double deltat=  0.005; 	    // Length of time step
+        int T_short=    1;          // The length of short-term variation 
+        double m=       20.0;       // The ratio of spans in sampling new long-term variation to short-term variation
+        int T_long=     T_short*m;  // The length of long-term vatiation 
     // Basic variables
-		int i,j;                    // For loop counters
-		double t=              0.0; // Time logs
-        double T_remain_long=  0.0; // Counter of remaining season length (entire episode)
-        double T_remain_short= 0.0; // Counter of remaining time within one short-term condition
-		double pp=             0.0;	// Temp for random number
-        double ext_thr=        0.5; // Threshold of population for terminating (related to s4)
-    // performance curve parameters
+		int i,j;                        // For loop counters
+		double t=              0.0;     // Time logs
+        double T_remain_long=  0.0;     // Counter of remaining time to resample long-term variations
+        double T_remain_short= 0.0;     // Counter of remaining time to resample short-term variations
+		double pp=             0.0;	    // Temp for random number
+        double ext_thr=        0.5;     // Threshold of population for terminating (related to s4)
+    // Performance curve parameters
                 double scale_K=     250.0;                      // Scaling coefficient of carrying capacity
                 double scale_b=     0.5;                        // Scaling coefficient of intrinsic growth rate
                 double scale_d=     0.01;                       // Scaling coefficient of mortality rate
@@ -101,8 +101,8 @@ int main (void)
                         B_beta= tgamma(alpha_beta)*tgamma(beta_beta)/tgamma(alpha_beta+beta_beta);                    
                     d_max= pow(p_mean,tmp_beta1)*pow(p_mean,tmp_beta2)/B_beta;
     // Temperaure distribution (environmental factors)
-        double tmp_tmp;                                 // temporal storage the mean environmental condition of an episode
-        double curr_tmp;                                // the current environmental condition of a phase
+        double tmp_env;                                 // temporal storage the sampled long-term variation
+        double curr_env;                                // the current environmental condition
         // normal dist (switch: s6)
             double mean_tmp= 	25.0;
             double sd_tmp=	 	5.0;
@@ -113,19 +113,19 @@ int main (void)
             double base= 		lower;
             double range= 		upper- lower;
         // Beta dist (switch: s6)
-            // scale of environmental variation (episode level, longer-term)
+            // scale of environmental variation (longer-term)
             double range_env=           100.0;          // specify the range of environmental conditions to [0:range_env]
-            // scale of environmental variation (phase level, shorter-term)
+            // scale of environmental variation (shorter-term)
             double range_short_env=     60.0;           // specify the range of environmental conditions to [0:range_short_env]
             // average environmental condition
-            double mean_beta=           50.0;
+            double mean_env=            50.0;
             //******** environment= mean+ sampled_value -1/2*sample_range ********//
-            double shape_tmp=	        3.0;          // Shape of environmental distribution (longer-term)
-            double shape_short_tmp=     100.0;         // Shape of environmental distribution (shorter-term)
+            double shape_long_var=	    100.0;          // Shape of environmental distribution (longer-term)
+            double shape_short_var=     100.0;          // Shape of environmental distribution (shorter-term)
             gen_beta_param beta_tmp;	           	    // create the random beta type variable [0:1]
             gen_beta_param beta_short_tmp;
-            gen_beta_initialize(&beta_tmp, shape_tmp, shape_tmp); // assuming symmetric distribution (a=b)
-            gen_beta_initialize(&beta_short_tmp, shape_short_tmp, shape_short_tmp); // a=b
+            gen_beta_initialize(&beta_tmp, shape_long_var, shape_long_var); // assuming no skewness
+            gen_beta_initialize(&beta_short_tmp, shape_short_var, shape_short_var); 
     // Checking the simulation
         int restart= 1;
         int redo_counter= 0;
@@ -133,46 +133,42 @@ int main (void)
 	// Creating temporal space
 		double *p= d_vector(2);
 		double *dfdt= d_vector(2);
-        double abf_1, abf_2;
+        double abf_spcl, abf_genl;
 	// Output
 		FILE *out;
 		out= fopen("summary.txt","w");
 	// Initialization
-		p[i_x]= 250;// initial population of specialists
-		p[i_y]= 250;// initial population of generalists
-		fprintf(out,"N1\tN2\ttime\tenvironment\tabf_1\tabf_2\n");
-		fprintf(out,"%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n",p[i_x],p[i_y],t,0.0,0.0,0.0);
+		p[i_spcl]= 250;// initial population of specialists
+		p[i_genl]= 250;// initial population of generalists
+		fprintf(out,"Nr\tNb\ttime\tenvironment\tabf_r\tabf_b\n");
+		fprintf(out,"%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n",p[i_spcl],p[i_genl],t,0.0,0.0,0.0);
 
     // Main loop of time series
     while(restart==1&& redo_counter< redo_limit){   // avoiding misscounting or other errors
         for (i=1; i<=T/deltat; i++){
-            // Starting an long-term variation
+            // Starting a long-term variation
                 if (T_remain_long<=0){
-                    // starting of an episode
                     T_remain_long= T_long;
-                    // performance curve initialization
-                    // Calculating mean environmental state of the episode (i.e. tmp_tmp)
-                    // Calculating current environmental state (i.e. curr_tmp)
                     if (s6==2){                     // Beta distribution
-                        tmp_tmp= mean_beta+ gen_beta(&beta_tmp)*range_env- range_env/2;
-                        curr_tmp= tmp_tmp+ gen_beta(&beta_short_tmp)*range_short_env- range_short_env/2;
+                        tmp_env= mean_env+ gen_beta(&beta_tmp)*range_env- range_env/2;
+                        curr_env= tmp_env+ gen_beta(&beta_short_tmp)*range_short_env- range_short_env/2;
                         T_remain_short= T_short;
                     }
                     if (s6==1){                     // Normal distribution
                         u1= gen_unif(&beta_tmp);
                         u2= gen_unif(&beta_tmp);
-                        curr_tmp= normal_dist_BM (mean_tmp, sd_tmp, u1, u2);
+                        curr_env= normal_dist_BM (mean_tmp, sd_tmp, u1, u2);
                     }
                     if (s6==0){                     // Uniform distribution
-                        curr_tmp= base+ range*gen_unif(&beta_tmp);
+                        curr_env= base+ range*gen_unif(&beta_tmp);
                     }
                 }
             // Starting a short-term variation
                 if(T_remain_short<= 0){
-                    curr_tmp= tmp_tmp+ gen_beta(&beta_short_tmp)*range_short_env -range_short_env/2;
+                    curr_env= tmp_env+ gen_beta(&beta_short_tmp)*range_short_env -range_short_env/2;
                     T_remain_short= T_short;
                     // Calculating parameters from Beta probability distribution function
-                        x_beta1= curr_tmp/range_bio;
+                        x_beta1= curr_env/range_bio;
                         x_beta2= 1-x_beta1;
                         // Specialist
                             // Parameters of the Bata function
@@ -185,7 +181,7 @@ int main (void)
                             K_spcl= scale_K* pow(x_beta1,tmp_beta1)*pow(x_beta2,tmp_beta2)/B_beta;
                             b_spcl= scale_b* pow(x_beta1,tmp_beta1)*pow(x_beta2,tmp_beta2)/B_beta;
                             d_spcl= scale_d* (d_max-pow(x_beta1,tmp_beta1)*pow(x_beta2,tmp_beta2)/B_beta);
-                            if(K_spcl!=K_spcl) K_spcl=0;      // hadling the conditions out of range
+                            if(K_spcl!=K_spcl) K_spcl=0;  // hadling the conditions out of range
                             if(b_spcl!=b_spcl) b_spcl=0;  // hadling the conditions out of range
                             if(d_spcl!=d_spcl) d_spcl=0;  // hadling the conditions out of range
                         // Generalist
@@ -199,12 +195,12 @@ int main (void)
                             K_genl= scale_K* pow(x_beta1,tmp_beta1)*pow(x_beta2,tmp_beta2)/B_beta;
                             b_genl= scale_b* pow(x_beta1,tmp_beta1)*pow(x_beta2,tmp_beta2)/B_beta; 
                             d_genl= scale_d* (d_max-pow(x_beta1,tmp_beta1)*pow(x_beta2,tmp_beta2)/B_beta);
-                            if(K_genl!=K_genl) K_genl=0;      // hadling the conditions out of range
+                            if(K_genl!=K_genl) K_genl=0;  // hadling the conditions out of range
                             if(b_genl!=b_genl) b_genl=0;  // hadling the conditions out of range 
                             if(d_genl!=d_genl) d_genl=0;  // hadling the conditions out of range
                 }
             // Define the performance where environmental condition is out of range
-                if (curr_tmp> range_bio || curr_tmp<0){
+                if (curr_env> range_bio || curr_env<0){
                     K_spcl= K_genl= 0;
                     b_spcl= b_genl=0;
                     d_spcl= scale_d*d_max;
@@ -216,10 +212,10 @@ int main (void)
                 }
             // Calculating per capita growth rate (fitness)
                 if(i%50==0) {
-                    if(K_spcl>0 && b_spcl>0) abf_1= (b_spcl- b_spcl/K_spcl*p[i_x]- b_spcl/K_spcl*a_gs*p[i_y]- d_spcl);
-                    else abf_1= -1*d_spcl;
-                    if(K_genl>0 && b_genl>0) abf_2= (b_genl- b_genl/K_genl*p[i_y]- b_genl/K_genl*a_sg*p[i_x]- d_genl);
-                    else abf_2= -1*d_genl;
+                    if(K_spcl>0 && b_spcl>0) abf_spcl= (b_spcl- b_spcl/K_spcl*p[i_spcl]- b_spcl/K_spcl*a_gs*p[i_genl]- d_spcl);
+                    else abf_spcl= -1*d_spcl;
+                    if(K_genl>0 && b_genl>0) abf_genl= (b_genl- b_genl/K_genl*p[i_genl]- b_genl/K_genl*a_sg*p[i_spcl]- d_genl);
+                    else abf_genl= -1*d_genl;
                 }
             // Calculating the change in population size with time change "deltat"
                 differential(t,p,dfdt);
@@ -229,14 +225,14 @@ int main (void)
                 T_remain_short-= deltat;
                 t+= deltat;
             // Record current population
-                if(i%50==0) fprintf(out,"%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n",p[i_x],p[i_y],t, curr_tmp, abf_1, abf_2);
+                if(i%50==0) fprintf(out,"%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n",p[i_spcl],p[i_genl],t, curr_env, abf_spcl, abf_genl);
             // extinction of population
                 if(s4==1){
-                    if(p[i_x]<ext_thr) p[i_x]=0;
-                    if(p[i_y]<ext_thr) p[i_y]=0;
+                    if(p[i_spcl]<ext_thr) p[i_spcl]=0;
+                    if(p[i_genl]<ext_thr) p[i_genl]=0;
                 }
             // Warning message
-                if(p[i_x]<0||p[i_y]<0) {
+                if(p[i_spcl]<0||p[i_genl]<0) {
                     printf("Dynamics crashed.\n");
                     restart=1;
                     redo_counter+= 1;                
@@ -267,18 +263,18 @@ void message_error(char error_text[]) //standard error handler
 
 double dx_dt(double time, double vr[])	// Solitary
 {
-    if(K_spcl>0 && b_spcl>0) return (b_spcl- b_spcl/K_spcl*vr[i_x]- b_spcl/K_spcl*a_gs*vr[i_y]- d_spcl)*vr[i_x];
-    else return -1*d_spcl*vr[i_x];
+    if(K_spcl>0 && b_spcl>0) return (b_spcl- b_spcl/K_spcl*vr[i_spcl]- b_spcl/K_spcl*a_gs*vr[i_genl]- d_spcl)*vr[i_spcl];
+    else return -1*d_spcl*vr[i_spcl];
 }
 double dy_dt(double time, double vr[])	// Cooperative
 {
-    if(K_genl>0 && b_genl>0) return (b_genl- b_genl/K_genl*vr[i_y]- b_genl/K_genl*a_sg*vr[i_x]- d_genl)*vr[i_y];
-    else return -1*d_genl*vr[i_y];
+    if(K_genl>0 && b_genl>0) return (b_genl- b_genl/K_genl*vr[i_genl]- b_genl/K_genl*a_sg*vr[i_spcl]- d_genl)*vr[i_genl];
+    else return -1*d_genl*vr[i_genl];
 }
 void differential(double time, double in[], double out[])
 {
-	out[i_x]= dx_dt(time,in);
-	out[i_y]= dy_dt(time,in);
+	out[i_spcl]= dx_dt(time,in);
+	out[i_genl]= dy_dt(time,in);
 }
 void rk4(double p[], double k1[],int n, double t, double h, double pout[],void(*diff)(double,double[],double[]))
 {
