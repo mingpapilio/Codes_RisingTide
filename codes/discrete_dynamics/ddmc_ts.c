@@ -1,15 +1,13 @@
 /*
- * Continual generation model with good/ bad year
- * Focal point is founder effect and the selection of better survival/ better birth species
- * First day of building: 19 July, 2017
- * Transformed to short-long term variability model from 23 Feb, 2018
+ * Discrete population dynamics model
+ * This file generates time series of population dynamics
  * File instruction:
  * 1. Put "gen_beta.h" and "gen_beta.c" in the folder containing this file
  * 2. Put the dsfmt folder and the folder containing this file into the same folder
  ************************************************************************************************
 
 Execution: (g++ and gcc both work)
-gcc cdmc_ts.c gen_beta.h gen_beta.c -lm -stdlib=libstdc++
+gcc ddmc_ts.c gen_beta.h gen_beta.c -lm -stdlib=libstdc++
 ./a.out
 
 Plot with gnuplot:
@@ -21,7 +19,7 @@ plot 'summary.txt' using 3:1 title 'rising-tide' with lines lc rgb 'orange',\
  * Key parameters
  * mean_env: The average environmental condition
  * shape_long_var, shape_short_var: The shape parameter of Beta distribution for generating environemntal conditions, both long-term and short-term. Larger velues indicate narrower distribution. 
- * T_long, T_short: The relative durations of shorter- and longer-term conditions (T_long= T_short*m)  
+ * N_event: The relative durations of shorter- and longer-term conditions (N_event= m)  
  */
 
 #include <stdio.h>
@@ -95,7 +93,7 @@ int main (void)
                         tmp_beta2= beta_beta-1;
                         B_beta= tgamma(alpha_beta)*tgamma(beta_beta)/tgamma(alpha_beta+beta_beta);                    
                     d_max= pow(p_mean,tmp_beta1)*pow(p_mean,tmp_beta2)/B_beta;
-    // Temperaure distribution (environmental factors)
+    // Environmental paramters
         double tmp_env;                                 // temporal storage the sampled long-term variation
         double curr_env;                                // the current environmental condition
         // normal dist (switch: s6)
