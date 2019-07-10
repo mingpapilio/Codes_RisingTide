@@ -17,9 +17,12 @@ plot 'summary.txt' using 3:1 title 'rising-tide' with lines lc rgb 'orange',\
 
  ************************************************************************************************
  * Key parameters
+ * s1, s2: Determine the type of distribution function in biological response and environmental variation
+ * s5: Determine whether the average fitness of bet-hedging strategy is lower than that of the rising-tide strategy
  * mean_env: The average environmental condition
  * shape_long_var, shape_short_var: The shape parameter of Beta distribution for generating environemntal conditions, both long-term and short-term. Larger velues indicate narrower distribution. 
- * N_event: The relative durations of shorter- and longer-term conditions (N_event= m)  
+ * shape_ris, shape_bet: the shape of performance curves, higher values bring narrower curves (Beta function, s1==2)
+ * N_event: The relative durations of short- and long-term conditions (N_event= m)  
  */
 
 #include <stdio.h>
@@ -40,188 +43,232 @@ plot 'summary.txt' using 3:1 title 'rising-tide' with lines lc rgb 'orange',\
     void differential(double time,double in[],double out[]);
     double dx_dt(double time, double vr[]);             //vr is a vector of variable
     double dy_dt(double time, double vr[]);
-    double normal_dist_BM (double mean, double sd, double u1, double u2);
-    double factorial (double x); 
     double mean (double x[], int length);
+    double normal_dist_BM (double mean, double sd, double u1, double u2);           // Generates a random number from a normal distribution
+    double Beta_function (double x_beta1, double alpha_beta, double beta_beta);     // Gives the density of Beta distribution
+
 
 // Global variables
+    // Switches
+        int s1= 2;                  // Specify the type of performance curve (1: normal distribution, 2: beta distribution)
+        int s2= 2;                  // Specify the type of distribution in environmental conditions  (1: normal distribution, 2: beta distribution)
+        int s4= 1;				    // Switch of terminating tiny populaitons (see ext_thr)
+        int s5= 1;                  // Switch of smaller average fitness for bet-hedging strategy (see gamma_bet)
     // Index of variables
-        int i_spcl= 1;          // Index of specialist (rising-tide strategy)
-        int i_genl= 2;          // Index of generalist (bet-hedging strategy)
+        int i_ris= 1;               // Index of the rising-tide strategy
+        int i_bet= 2;               // Index of the bet-hedging strategy
     // differential equation paramters (K, b, d will change according to environmental conditions)
-        double b_spcl;          // Intrinsic growth rate of specialists
-        double b_genl;          // Intrinsic growth rate of generallists
-        double d_spcl;          // Environment-dependent mortality of specialists
-        double d_genl;          // Environment-dependent mortality of generalists 
-        double K_spcl;          // Carrying capacity of specialists 
-        double K_genl;          // Carrying capacity of generalists 
-        double a_sg= 0.4;       // Intensity of inter-strategic interactions (specialists to generalists)
-        double a_gs= 0.4;       // Intensity of inter-strategic interactions (generalists to specialists)
+        double b_ris;               // Intrinsic growth rate of rising-tide strategy
+        double b_bet;               // Intrinsic growth rate of bet-hedging strategy
+        double d_ris;               // Environment-dependent mortality of rising-tide strategy
+        double d_bet;               // Environment-dependent mortality of bet-hedging strategy
+        double K_ris;               // Carrying capacity of rising-tide strategy
+        double K_bet;               // Carrying capacity of bet-hedging strategy
+        double a_rb=        0.4;    // Intensity of inter-strategic interactions (rising-tide to bet-hedging)
+        double a_br=        0.4;    // Intensity of inter-strategic interactions (bet-hedging to rising-tide)
+        double gamma_ris=   1.0;    // Scaling coefficient of average fitness (area of performance curve)
+        double gamma_bet=   0.9;    // Scaling coefficient of average fitness (area of performance curve)
+        double scale_K=     250.0;  // Scaling coefficient of carrying capacity
+        double scale_b=     0.5;    // Scaling coefficient of intrinsic growth rate
+        double scale_d=     0.01;   // Scaling coefficient of mortality rate
 
 // Main function
 int main (void)
 {
-    // Switches
-        int s4= 1;				    // Switch of terminating tiny populaitons
-        int s6= 2;                  // Specify the type of distribution in environmental conditions
     // Temporal variables
-        int N_gen= 1000;            // Number of generations (calculations)
-        int N_event= 20;            // Number of events within a generation (calculation), equivilent to m in the text
+        int N_gen= 1000;                // Number of calculations, conceptually similar with generations in non-overlapping settings
+        int N_event= 20;                // Number of events within a calculation, equivilent to m in the text and the continuous dynamics model
     // Basic variables
 		int i,j;                        // For loop counters
 		double t=              0.0;     // Time logs
 		double pp=             0.0;	    // Temp for random number
         double ext_thr=        0.5;     // Threshold of population for terminating (related to s4)
     // Performance curve parameters
-                double scale_K=     250.0;                      // Scaling coefficient of carrying capacity
-                double scale_b=     0.5;                        // Scaling coefficient of intrinsic growth rate
-                double scale_d=     0.01;                       // Scaling coefficient of mortality rate
-                double range_bio=   100.0;                      // The responsive environmental conditions (0-range_bio) of the biological performance curves
-            // Beta dist
-                double shape_spcl=	     50.0;                  // Shape of specialist's performance curve in carrying capacity (The larger, the narrower)
-                double shape_genl=	     5.0;                   // Shape of generalist's performance curve in carrying capacity
-                double skew_spcl=        1.0;                   // Skewness of specialist's performance curve, alpha= skew*shape*2
-                double skew_genl=        1.0;                   // Skewness of generalist's performance curve
-                double p_mean=           1/(1+skew_spcl);       // Input of the maximum of the Beta shape function, for inversing the shape in mortality dunction (i.e. d_max)
-                double x_beta1, x_beta2;
-                double B_beta,tmp_beta1, tmp_beta2, alpha_beta, beta_beta;
-                // Calculating the maximum mortality for inversing the performance curves (assuming specialists are higher)
-                    double d_max;
-                        alpha_beta= shape_spcl;
-                        beta_beta= shape_spcl*skew_spcl;
-                        tmp_beta1= alpha_beta-1;
-                        tmp_beta2= beta_beta-1;
-                        B_beta= tgamma(alpha_beta)*tgamma(beta_beta)/tgamma(alpha_beta+beta_beta);                    
-                    d_max= pow(p_mean,tmp_beta1)*pow(p_mean,tmp_beta2)/B_beta;
+        // Normal distribution (s1==1)
+            double mean_ris=    50.0;           // Optimal environmental condition of the rising-tide strategy (average of the distribution)
+            double mean_bet=    50.0;           // Optimal environmental condition of the bet-hedging strategy (average of the distribution)
+            double sd_ris=      1.0;            // Width parameter of the performance of the rising-tide strategy (sd of the distribution)
+            double sd_bet=      10.0;           // Width parameter of the performance of the bet-hedging strategy (sd of the distribution)
+            // Calculating the maximum mortality for inversing the performance curves (assuming specialists are higher)
+            double d_max;
+            double env_norm= exp(0)/sqrt(2*M_PI*sd_ris*sd_ris);
+            d_max= env_norm;
+        // Beta distribution (s1==2)
+            double range_bio=   100.0;          // The responsive environmental conditions (0-range_bio) of the biological performance curves
+            double shape_ris=   50.0;           // Shape of rising-tide strategy's performance curve in carrying capacity (The larger, the narrower)
+            double shape_bet=   5.0;            // Shape of bet-hedging strategy's performance curve in carrying capacity
+            double skew_ris=    1.0;            // Skewness of rising-tide strategy's performance curve, alpha= skew*shape*2
+            double skew_bet=    1.0;            // Skewness of bet-hedging strategy's performance curve
+            // skew=1 means no skewness of the performance curve
+            double p_mean=      1/(1+skew_ris); // Input of the maximum of the Beta shape function, for inversing the shape in mortality dunction (i.e. d_max)
+            double x_beta1, x_beta2;
+            double B_beta,tmp_beta1, tmp_beta2, alpha_beta, beta_beta, env_beta;
+            // Calculating the maximum mortality for inversing the performance curves (assuming specialists are higher)
+                alpha_beta=     shape_ris;
+                beta_beta=      shape_ris*skew_ris;
+            d_max= Beta_function(p_mean, alpha_beta, beta_beta);
     // Environmental paramters
-        double tmp_env;                                 // temporal storage the sampled long-term variation
-        double curr_env;                                // the current environmental condition
-        // normal dist (switch: s6)
-            double mean_tmp= 	25.0;
-            double sd_tmp=	 	5.0;
+        double tmp_env;                         // temporal storage the sampled long-term variation
+        double curr_env;                        // the current environmental condition
+        // Normal distribution (s2==1)
+            double mean_tmp= 	        50.0;   // Average environmental condition
+            double sd_tmp=	 	        5.0;    // Size of long-term variation (standard deviation of the distribution)
+            double sd_short_tmp=        5.0;    // Size of short-term variation
             double u1, u2;
-        // uniform dist (switch: s6)
-            double lower= 		5.0;
-            double upper= 		45.0;
-            double base= 		lower;
-            double range= 		upper- lower;
-        // Beta dist (switch: s6)
-            // scale of environmental variation (longer-term)
-            double range_env=           100.0;          // specify the range of environmental conditions to [0:range_env]
-            // scale of environmental variation (shorter-term)
-            double range_short_env=     60.0;           // specify the range of environmental conditions to [0:range_short_env]
+        // Beta distribution (s2==2)
             // average environmental condition
-            double mean_env=            50.0;
+            double mean_env=            50.0;   // Average environmental condition
+            // range of environmental variation (long-term)
+            double range_env=           100.0;  // Specify the range of environmental conditions to [0:range_env]
+            // range of environmental variation (short-term)
+            double range_short_env=     60.0;   // Specify the range of environmental conditions to [0:range_short_env]
             //******** environment= mean+ sampled_value -1/2*sample_range ********//
-            double shape_long_var=	    100.0;          // Shape of environmental distribution (longer-term)
-            double shape_short_var=     100.0;          // Shape of environmental distribution (shorter-term)
-            gen_beta_param beta_tmp;	           	    // create the random beta type variable [0:1]
-            gen_beta_param beta_short_tmp;
-            gen_beta_initialize(&beta_tmp, shape_long_var, shape_long_var); // assuming no skewness
+            double shape_long_var=	    100.0;  // Shape of environmental distribution (long-term)
+            double shape_short_var=     100.0;  // Shape of environmental distribution (short-term)
+            gen_beta_param beta_tmp;            // Create the beta type variable
+            gen_beta_param beta_short_tmp;      // Create the beta type variable
+            gen_beta_initialize(&beta_tmp, shape_long_var, shape_long_var); // assuming environmental distribution has no skewness
             gen_beta_initialize(&beta_short_tmp, shape_short_var, shape_short_var); 
-
 	// Creating temporal space
 		double *p= d_vector(2);
-        double abf_spcl, abf_genl;
-        double *K_spcl_within= d_vector(N_event);
-        double *K_genl_within= d_vector(N_event);
-        double *b_spcl_within= d_vector(N_event);
-        double *b_genl_within= d_vector(N_event);
-        double *d_spcl_within= d_vector(N_event);
-        double *d_genl_within= d_vector(N_event);
+        double abf_ris, abf_bet;
+        double *K_ris_within= d_vector(N_event);
+        double *K_bet_within= d_vector(N_event);
+        double *b_ris_within= d_vector(N_event);
+        double *b_bet_within= d_vector(N_event);
+        double *d_ris_within= d_vector(N_event);
+        double *d_bet_within= d_vector(N_event);
         double K_1, K_2, b_1, b_2, d_1, d_2, tmp_x, tmp_y;
 	// Output
 		FILE *out, *env;
 		out= fopen("summary.txt","w");
         env= fopen("env_log.txt","w");
 	// Initialization
-		p[i_spcl]= 250;// initial population of specialists
-		p[i_genl]= 250;// initial population of generalists
-		fprintf(out,"N1\tN2\tGeneration\tabf_1\tabf_2\n");
-        fprintf(env,"Generation\tenv\n");
-		fprintf(out,"%lf\t%lf\t%lf\n",p[i_spcl],p[i_genl],t);
+		p[i_ris]= 250;                          // initial population of rising-tide strategy
+		p[i_bet]= 250;                          // initial population of bet-hedging strategy
+		fprintf(out,"N1\tN2\tCalculation\tabf_1\tabf_2\n");
+        fprintf(env,"Calculation\tenv\n");
+		fprintf(out,"%lf\t%lf\t%lf\n",p[i_ris],p[i_bet],t);
 
     // Main loop of time series
     for(j=1; j<=N_gen; j++){   // avoiding misscounting or other errors
-        tmp_env= mean_env+ gen_beta(&beta_tmp)*range_env- range_env/2;
+        if(s2==2) tmp_env= mean_env+ gen_beta(&beta_tmp)*range_env- range_env/2;
+        if(s2==1) {
+            u1= gen_unif(&beta_tmp);
+            u2= gen_unif(&beta_tmp);
+            tmp_env= normal_dist_BM (mean_tmp, sd_tmp, u1, u2);
+        }
         for (i=1; i<=N_event; i++){
             // Starting a short-term variation
-                curr_env= tmp_env+ gen_beta(&beta_short_tmp)*range_short_env -range_short_env/2;
+                if(s2==2) curr_env= tmp_env+ gen_beta(&beta_short_tmp)*range_short_env -range_short_env/2;
+                if(s2==1){
+                    u1= gen_unif(&beta_tmp);
+                    u2= gen_unif(&beta_tmp);
+                    curr_env= normal_dist_BM (tmp_env, sd_short_tmp, u1, u2);                               
+                }
                 // Calculating parameters from Beta probability distribution function
+                    if(s1==2){
                     x_beta1= curr_env/range_bio;
                     x_beta2= 1-x_beta1;
-                    // Specialist
+                    // Rising-tide 
                         // Parameters of the Bata function
-                        alpha_beta= shape_spcl;
-                        beta_beta= shape_spcl*skew_spcl;
-                        tmp_beta1= alpha_beta-1;
-                        tmp_beta2= beta_beta-1;
-                        B_beta= tgamma(alpha_beta)*tgamma(beta_beta)/tgamma(alpha_beta+beta_beta);
+                        alpha_beta= shape_ris;
+                        beta_beta= shape_ris*skew_ris;
+                        env_beta= Beta_function(x_beta1, alpha_beta, beta_beta);
                         // Calculation
-                        K_spcl= scale_K* pow(x_beta1,tmp_beta1)*pow(x_beta2,tmp_beta2)/B_beta;
-                        b_spcl= scale_b* pow(x_beta1,tmp_beta1)*pow(x_beta2,tmp_beta2)/B_beta;
-                        d_spcl= scale_d* (d_max-pow(x_beta1,tmp_beta1)*pow(x_beta2,tmp_beta2)/B_beta);
-                        if(K_spcl!=K_spcl) K_spcl=0;  // hadling the conditions out of range
-                        if(b_spcl!=b_spcl) b_spcl=0;  // hadling the conditions out of range
-                        if(d_spcl!=d_spcl) d_spcl=0;  // hadling the conditions out of range
-                    // Generalist
+                        K_ris= scale_K* env_beta;
+                        b_ris= scale_b* env_beta;
+                        d_ris= scale_d* (d_max-env_beta);
+                        if(K_ris!=K_ris) K_ris=0;  // hadling the conditions out of range
+                        if(b_ris!=b_ris) b_ris=0;  // hadling the conditions out of range
+                        if(d_ris!=d_ris) d_ris=0;  // hadling the conditions out of range
+                    // Bet-hedging
                         // Parameters of the Beta function
-                        alpha_beta= shape_genl;
-                        beta_beta= shape_genl*skew_genl;
-                        tmp_beta1= alpha_beta-1;
-                        tmp_beta2= beta_beta-1;
-                        B_beta= tgamma(alpha_beta)*tgamma(beta_beta)/tgamma(alpha_beta+beta_beta);
+                        alpha_beta= shape_bet;
+                        beta_beta= shape_bet*skew_bet;
+                        env_beta= Beta_function(x_beta1, alpha_beta, beta_beta);
                         // Calculation
-                        K_genl= scale_K* pow(x_beta1,tmp_beta1)*pow(x_beta2,tmp_beta2)/B_beta;
-                        b_genl= scale_b* pow(x_beta1,tmp_beta1)*pow(x_beta2,tmp_beta2)/B_beta; 
-                        d_genl= scale_d* (d_max-pow(x_beta1,tmp_beta1)*pow(x_beta2,tmp_beta2)/B_beta);
-                        if(K_genl!=K_genl) K_genl=0;  // hadling the conditions out of range
-                        if(b_genl!=b_genl) b_genl=0;  // hadling the conditions out of range 
-                        if(d_genl!=d_genl) d_genl=0;  // hadling the conditions out of range
+                        K_bet= scale_K* env_beta;
+                        b_bet= scale_b* env_beta; 
+                        d_bet= scale_d* (d_max-env_beta);
+                        if(K_bet!=K_bet) K_bet=0;  // hadling the conditions out of range
+                        if(b_bet!=b_bet) b_bet=0;  // hadling the conditions out of range 
+                        if(d_bet!=d_bet) d_bet=0;  // hadling the conditions out of range
+                    // Different mean fitness
+                        if(s5==1){
+                            K_bet= scale_K* env_beta* gamma_bet;
+                            b_bet= scale_b* env_beta* gamma_bet;
+                            d_bet= scale_d* (d_max-env_beta* gamma_bet);
+                        }
+                    }
+                    // Normal dist
+                    if(s1==1){
+                        // rising-tide
+                        env_norm= exp(-1*(curr_env-mean_ris)*(curr_env-mean_ris)/2/sd_ris/sd_ris)/sqrt(2*M_PI*sd_ris*sd_ris);
+                        K_ris= scale_K*env_norm;
+                        b_ris= scale_b*env_norm;
+                        d_ris= scale_d*(d_max-env_norm);
+                        // bet-hedging
+                        env_norm= exp(-1*(curr_env-mean_bet)*(curr_env-mean_bet)/2/sd_bet/sd_bet)/sqrt(2*M_PI*sd_bet*sd_bet);
+                        K_bet= scale_K* env_norm;
+                        b_bet= scale_b* env_norm; 
+                        d_bet= scale_d* (d_max-env_norm);
+                    // Different mean fitness
+                        if(s5==1){
+                            K_bet= scale_K* env_beta* gamma_bet;
+                            b_bet= scale_b* env_beta* gamma_bet;
+                            d_bet= scale_d* (d_max-env_beta* gamma_bet);
+                        }
+                    }
             // Define the performance where environmental condition is out of range
                 if (curr_env> range_bio || curr_env<0){
-                    K_spcl= K_genl= 0;
-                    b_spcl= b_genl= 0;
-                    d_spcl= d_genl= scale_d*d_max;
+                    K_ris= K_bet= 0;
+                    b_ris= b_bet= 0;
+                    d_ris= d_bet= scale_d*d_max;
                 }
 
-            K_spcl_within[i]= K_spcl;
-            K_genl_within[i]= K_genl;
-            b_spcl_within[i]= b_spcl;
-            b_genl_within[i]= b_genl;
-            d_spcl_within[i]= d_spcl;
-            d_genl_within[i]= d_genl;
+            K_ris_within[i]= K_ris;
+            K_bet_within[i]= K_bet;
+            b_ris_within[i]= b_ris;
+            b_bet_within[i]= b_bet;
+            d_ris_within[i]= d_ris;
+            d_bet_within[i]= d_bet;
             t+= pow(N_event, -1);
             fprintf(env,"%lf\t%lf\n",t,curr_env);
         }
-        K_1= mean(K_spcl_within, N_event);
-        K_2= mean(K_genl_within, N_event);
-        b_1= mean(b_spcl_within, N_event);
-        b_2= mean(b_genl_within, N_event);
-        d_1= mean(d_spcl_within, N_event);
-        d_2= mean(d_genl_within, N_event);
+        K_1= mean(K_ris_within, N_event);
+        K_2= mean(K_bet_within, N_event);
+        b_1= mean(b_ris_within, N_event);
+        b_2= mean(b_bet_within, N_event);
+        d_1= mean(d_ris_within, N_event);
+        d_2= mean(d_bet_within, N_event);
 
-        tmp_x= p[i_spcl];
-        tmp_y= p[i_genl];
-        if(K_1>0&& b_1>0) abf_spcl= (1+ b_1*(1- tmp_x/K_1- a_gs*tmp_y/K_1)- d_1);
-        else abf_spcl= (1- d_1);
-        if(K_2>0&& b_2>0) abf_genl= (1+ b_2*(1- tmp_y/K_2- a_sg*tmp_x/K_2)- d_2);
-        else abf_genl= (1- d_2);
-        p[i_spcl]= tmp_x*abf_spcl;
-        p[i_genl]= tmp_y*abf_genl;
-        if(p[i_spcl]<0) p[i_spcl]=0;
-        if(p[i_genl]<0) p[i_genl]=0;
+        tmp_x= p[i_ris];
+        tmp_y= p[i_bet];
+        if(K_1>0&& b_1>0) abf_ris= (1+ b_1*(1- tmp_x/K_1- a_br*tmp_y/K_1)- d_1);
+        else abf_ris= (1- d_1);
+        if(K_2>0&& b_2>0) abf_bet= (1+ b_2*(1- tmp_y/K_2- a_rb*tmp_x/K_2)- d_2);
+        else abf_bet= (1- d_2);
+        p[i_ris]= tmp_x*abf_ris;
+        p[i_bet]= tmp_y*abf_bet;
+        if(p[i_ris]<0) p[i_ris]=0;
+        if(p[i_bet]<0) p[i_bet]=0;
+        // Extinction of tiny population
+            if(s4==1){
+                if(p[i_ris]<ext_thr) p[i_ris]=0;
+                if(p[i_bet]<ext_thr) p[i_bet]=0;
+            }
 
-        fprintf(out,"%lf\t%lf\t%lf\t%lf\t%lf\n",p[i_spcl],p[i_genl],t,abf_spcl, abf_genl);
+        fprintf(out,"%lf\t%lf\t%lf\t%lf\t%lf\n",p[i_ris],p[i_bet],t,abf_ris, abf_bet);
     }
 
 	free_d_vector(p);
-    free_d_vector(K_spcl_within);
-    free_d_vector(K_genl_within);
-    free_d_vector(b_spcl_within);
-    free_d_vector(b_genl_within);
-    free_d_vector(d_spcl_within);
-    free_d_vector(d_genl_within);
+    free_d_vector(K_ris_within);
+    free_d_vector(K_bet_within);
+    free_d_vector(b_ris_within);
+    free_d_vector(b_bet_within);
+    free_d_vector(d_ris_within);
+    free_d_vector(d_bet_within);
 	fclose(out);
     fclose(env);
 	return 0;
@@ -234,21 +281,20 @@ void message_error(char error_text[]) //standard error handler
 	printf("...now existing to system...\n");
 	exit(1);
 }
-
-double dx_dt(double time, double vr[])	// Solitary
+double dx_dt(double time, double vr[])	// Rising-tide strategy
 {
-    if(K_spcl>0 && b_spcl>0) return (b_spcl- b_spcl/K_spcl*vr[i_spcl]- b_spcl/K_spcl*a_gs*vr[i_genl]- d_spcl)*vr[i_spcl];
-    else return -1*d_spcl*vr[i_spcl];
+    if(K_ris>0 && b_ris>0) return (b_ris- b_ris/K_ris*vr[i_ris]- b_ris/K_ris*a_br*vr[i_bet]- d_ris)*vr[i_ris];
+    else return -1*d_ris*vr[i_ris];
 }
-double dy_dt(double time, double vr[])	// Cooperative
+double dy_dt(double time, double vr[])	// Bet-hedging strategy
 {
-    if(K_genl>0 && b_genl>0) return (b_genl- b_genl/K_genl*vr[i_genl]- b_genl/K_genl*a_sg*vr[i_spcl]- d_genl)*vr[i_genl];
-    else return -1*d_genl*vr[i_genl];
+    if(K_bet>0 && b_bet>0) return (b_bet- b_bet/K_bet*vr[i_bet]- b_bet/K_bet*a_rb*vr[i_ris]- d_bet)*vr[i_bet];
+    else return -1*d_bet*vr[i_bet];
 }
 void differential(double time, double in[], double out[])
 {
-	out[i_spcl]= dx_dt(time,in);
-	out[i_genl]= dy_dt(time,in);
+	out[i_ris]= dx_dt(time,in);
+	out[i_bet]= dy_dt(time,in);
 }
 void rk4(double p[], double k1[],int n, double t, double h, double pout[],void(*diff)(double,double[],double[]))
 {
@@ -301,32 +347,6 @@ void free_d_matrix(double **x)
 	free(x);
 }
 void free_d_vector(double *x) {	free(x);}
-double normal_dist_BM (double mean, double sd, double u1, double u2)
-{
-    /* 
-     * Using Box-Muller method to generate pseudo-normal distributed numbers in [0,1]
-     * Constructed in Feb, 2018
-     */
-    double z1;
-	z1= sqrt(-2* log(u1))* cos(2* M_PI* u2);
-	return z1*sd+ mean;
-}
-double factorial (double x)
-{
-	int i;
-	double tmp, out;
-	if(x< 0) return 0;	// not sure
-	if(x<= 1) return 1;
-	else{
-		tmp= x;
-		out= 1;
-		for(i=1; i<= x; i++){
-			out= out*tmp;
-			tmp= tmp-1;
-		}
-		return out;
-	}
-}
 double mean (double x[], int length)
 {
 	int i;
@@ -336,4 +356,21 @@ double mean (double x[], int length)
 	}
 	return tmp/length;
 }
-
+double normal_dist_BM (double mean, double sd, double u1, double u2)
+{
+    // Using Box-Muller method to generate pseudo-normal distributed numbers in [0,1]
+    double z1;
+	z1= sqrt(-2* log(u1))* cos(2* M_PI* u2);
+	return z1*sd+ mean;
+}
+double Beta_function (double x_beta1, double alpha_beta, double beta_beta)
+{
+    double x_beta2, tmp_beta1, tmp_beta2, logAB_beta, logA_beta, logB_beta;
+    x_beta2= 1- x_beta1;
+    tmp_beta1= alpha_beta-1;
+    tmp_beta2= beta_beta-1;
+    logAB_beta= lgamma(alpha_beta)+lgamma(beta_beta)-lgamma(alpha_beta+beta_beta);
+    logA_beta= tmp_beta1*log(x_beta1);
+    logB_beta= tmp_beta2*log(x_beta2);
+    return exp(logA_beta+logB_beta-logAB_beta);
+}

@@ -7,6 +7,6 @@ This repository is for open access to source codes and data in the paper "Biolog
 
 3. In "codes" folder, files ending with "ts" are for generating time series of population dynamics, where as files with "rep" are for generating repeated simulations (e.g. Fig. 4, 5).
 
-4. In "simulated data" folder, we rearrange files by the sequence of each figure.
+4. In "simulated data" folder, we upload files according to the sequence of figures.
 
 (Ming Liu)
