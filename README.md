@@ -1,5 +1,5 @@
 # Codes_RisingTide
-This repository is for open access to source codes and data in the paper "Biological adaptation under fluctuating selection", https://doi.org/10.1098/rspb.2019.1623 .
+This repository is for open access to source codes and data in the paper "A continuum of biological adaptations to environmental fluctuation", https://doi.org/10.1098/rspb.2019.1623 .
 
 1. **PLEASE READ** the notes at the beginning of each file, containing the key parameters for simulations and notes for plotting. 
 
